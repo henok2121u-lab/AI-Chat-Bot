@@ -1,0 +1,103 @@
+# SupportBot — AI customer-support bot for WhatsApp & Telegram
+
+## What this is
+A multi-tenant SaaS-style app. A small business (restaurant, clinic, salon) signs up, enters its menu/services, prices, hours and FAQs. An AI bot answers customers on Telegram and WhatsApp, takes orders or bookings, and hands the conversation to a human when it is unsure or the customer asks for one. Business staff use a web dashboard to see conversations, take over chats, manage orders/bookings, and edit the info the bot uses.
+
+This is a portfolio project for Upwork. Code quality, a clean README, and a working demo matter as much as features.
+
+## Stack
+- Node.js 22+, TypeScript (ESM, NodeNext), Express 5
+- PostgreSQL + Prisma 7 (driver adapter `@prisma/adapter-pg`; config in `server/prisma.config.ts`; client generated to `server/src/generated/prisma`, import from `../generated/prisma/client.js`)
+- AI: Anthropic Claude API (`@anthropic-ai/sdk`) with tool use
+- Telegram Bot API (`grammy`)
+- WhatsApp Cloud API (Meta Graph API, plain `fetch`)
+- Dashboard: React + Vite + TypeScript + Tailwind, talking to the Express API
+- Auth: email + password, bcrypt, JWT in httpOnly cookie
+- Validation: zod. Logging: pino. Tests: vitest.
+- Local dev: docker-compose for Postgres on host port 5434 (5432/5433 are taken on this machine); `.env` lives at the repo root; ngrok (or cloudflared) to expose webhooks
+
+## Repo layout
+```
+/server
+  /src
+    /channels      telegram.ts, whatsapp.ts  (adapters: receive -> normalize, send)
+    /engine        conversation.ts (core loop), prompt.ts, tools.ts
+    /routes        auth, business, knowledge, conversations, orders, bookings, webhooks
+    /lib           db.ts, ai.ts, logger.ts, env.ts
+  /prisma          schema.prisma, seed.ts
+/dashboard         React app
+docker-compose.yml
+.env.example
+README.md
+```
+
+## Core architecture
+1. A channel adapter receives a webhook/update and converts it to a normalized message:
+   `{ businessId, channel: 'telegram'|'whatsapp', externalUserId, customerName?, text }`
+2. `engine/conversation.ts`:
+   - find or create Customer and Conversation
+   - save the incoming Message
+   - if conversation.mode === 'human' → do NOT call the AI; just notify the dashboard
+   - else build the system prompt from the business's knowledge (name, hours, location, menu/services with prices, FAQs, policies) and the last ~20 messages, call Claude with tools
+   - run any tool calls, loop until Claude returns a final text reply
+   - save the bot reply and send it via the same adapter
+3. The business knowledge is small enough to put directly in the system prompt. No vector DB / RAG for v1.
+
+## AI tools (Claude tool use)
+- `create_order({ items: [{ itemId, quantity, notes? }], deliveryType, address?, phone? })` — only items that exist in the menu; server recomputes the total from DB prices, never trusts the model's math
+- `create_booking({ serviceId?, date, time, partySize?, name, phone })` — check business hours and simple capacity
+- `check_order_status({ orderId })`
+- `handoff_to_human({ reason })` — sets conversation.mode = 'human', marks it as needing attention
+
+System prompt rules: answer only from provided business info; never invent prices or items; confirm order details with the customer before calling create_order; hand off when unsure, when the customer is angry, or when asked for a person; reply in the customer's language (English and Amharic at minimum); keep replies short (chat, not email).
+
+## Data model (Prisma, starting point)
+- User (id, email, passwordHash, businessId, role)
+- Business (id, name, type, hours JSON, location, phone, telegramBotToken?, whatsappPhoneNumberId?, whatsappAccessToken?, botEnabled)
+- MenuItem (id, businessId, name, description, price, category, available)
+- Service (id, businessId, name, durationMin, price) — for clinics/salons
+- Faq (id, businessId, question, answer)
+- Customer (id, businessId, channel, externalId, name, phone)
+- Conversation (id, businessId, customerId, channel, mode 'bot'|'human', needsAttention, lastMessageAt)
+- Message (id, conversationId, role 'customer'|'bot'|'agent', text, createdAt)
+- Order (id, businessId, customerId, conversationId, status, items JSON, total, deliveryType, address, createdAt)
+- Booking (id, businessId, customerId, conversationId, serviceId?, startsAt, partySize, status)
+
+Secrets (bot tokens, WhatsApp tokens) must be encrypted at rest (AES-256-GCM with a key from env).
+
+## Dashboard pages
+- Login / register business
+- Inbox: conversation list (needs-attention first), chat view, "Take over" / "Give back to bot" toggle, reply box (agent messages go out through the channel)
+- Orders: list, status changes (new → confirmed → ready → delivered / cancelled)
+- Bookings: list / simple calendar
+- Knowledge: edit business info, menu items, services, FAQs
+- Settings: connect Telegram (paste bot token → server calls setWebhook), connect WhatsApp (phone number ID + token), bot on/off
+- Live updates: start with polling every 5s; Server-Sent Events later
+
+## Channel notes
+- Telegram: one bot token per business; webhook URL `/webhooks/telegram/:businessId` with secret_token header check.
+- WhatsApp Cloud API: webhook `/webhooks/whatsapp` (GET for verify token, POST for messages; verify X-Hub-Signature-256). Route to business by phone_number_id. Free-form replies only within 24h of the customer's last message; outside that, templates are needed — show this in the dashboard.
+
+## Conventions
+- Validate all input with zod. All DB queries scoped by businessId (no cross-tenant leaks).
+- Respond 200 to webhooks quickly; process the message after.
+- Deduplicate incoming messages by external message ID.
+- No secrets in code; everything in `.env` (keep `.env.example` updated).
+- Write small tests for the engine and tools using a mocked AI client.
+
+## Build order
+1. Server skeleton, Prisma schema, docker-compose, seed a demo restaurant
+2. Conversation engine + Claude tools, tested with a local CLI chat (no channel yet)
+3. Telegram adapter end to end
+4. Auth + REST API
+5. Dashboard: login, knowledge editor, inbox with takeover
+6. Orders and bookings pages
+7. WhatsApp adapter
+8. Polish: README with screenshots and a demo GIF, deploy (Railway/Render + managed Postgres)
+
+## Commands (run in /server unless noted)
+- `docker compose up -d` (repo root) — start Postgres
+- `npm run dev` — API on http://localhost:4000 (`GET /health`)
+- `npm run db:migrate` — create/apply migrations; `npm run db:seed` — reseed demo restaurant (idempotent); `npm run db:studio`
+- `npm test`, `npm run typecheck`, `npm run build`
+- Demo login: `demo@supportbot.test` / `demo1234` (business id `demo-selam-kitchen`)

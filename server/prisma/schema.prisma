@@ -1,0 +1,260 @@
+// SupportBot data model. Every tenant-owned row carries businessId (directly or
+// through its parent) so all queries can be scoped to a single business.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  OWNER
+  STAFF
+}
+
+enum BusinessType {
+  RESTAURANT
+  CLINIC
+  SALON
+  OTHER
+}
+
+enum Channel {
+  TELEGRAM
+  WHATSAPP
+}
+
+enum ConversationMode {
+  BOT
+  HUMAN
+}
+
+enum MessageRole {
+  CUSTOMER
+  BOT
+  AGENT
+}
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryType {
+  PICKUP
+  DELIVERY
+  DINE_IN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         UserRole @default(OWNER)
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([businessId])
+}
+
+model Business {
+  id          String       @id @default(cuid())
+  name        String
+  type        BusinessType @default(RESTAURANT)
+  description String?
+  /// Weekly opening hours, e.g. { "mon": [{ "open": "07:00", "close": "22:00" }], "sun": [] }
+  hours       Json
+  /// IANA timezone used to interpret `hours` and booking times.
+  timezone    String       @default("Africa/Addis_Ababa")
+  currency    String       @default("ETB")
+  location    String?
+  phone       String?
+  /// Free-text policies the bot may quote (delivery area, payment, cancellations...).
+  policies    String?
+
+  /// Bookings allowed per time slot (simple capacity check).
+  bookingSlotCapacity Int @default(5)
+
+  // Channel credentials — stored AES-256-GCM encrypted (see src/lib/crypto.ts).
+  telegramBotToken      String?
+  telegramWebhookSecret String?
+  whatsappPhoneNumberId String? @unique
+  whatsappAccessToken   String?
+
+  botEnabled Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users         User[]
+  menuItems     MenuItem[]
+  services      Service[]
+  faqs          Faq[]
+  customers     Customer[]
+  conversations Conversation[]
+  orders        Order[]
+  bookings      Booking[]
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  category    String
+  available   Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([businessId, category])
+}
+
+model Service {
+  id          String    @id @default(cuid())
+  businessId  String
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  durationMin Int
+  price       Decimal   @db.Decimal(10, 2)
+  available   Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  bookings    Booking[]
+
+  @@index([businessId])
+}
+
+model Faq {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  question   String
+  answer     String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([businessId])
+}
+
+model Customer {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  channel    Channel
+  /// Telegram chat id or WhatsApp wa_id.
+  externalId String
+  name       String?
+  phone      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  conversations Conversation[]
+  orders        Order[]
+  bookings      Booking[]
+
+  @@unique([businessId, channel, externalId])
+}
+
+model Conversation {
+  id             String           @id @default(cuid())
+  businessId     String
+  business       Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  channel        Channel
+  mode           ConversationMode @default(BOT)
+  needsAttention Boolean          @default(false)
+  handoffReason  String?
+  /// Last inbound customer message — drives WhatsApp's 24h free-form reply window.
+  lastCustomerMessageAt DateTime?
+  lastMessageAt  DateTime         @default(now())
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  messages Message[]
+  orders   Order[]
+  bookings Booking[]
+
+  @@index([businessId, needsAttention, lastMessageAt])
+  @@index([customerId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  text           String
+  /// Channel message id, used to deduplicate webhook retries.
+  externalId     String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([conversationId, externalId])
+  @@index([conversationId, createdAt])
+}
+
+model Order {
+  id             String        @id @default(cuid())
+  /// Short human-friendly number customers can quote ("order #1042").
+  number         Int           @unique @default(autoincrement())
+  businessId     String
+  business       Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  status         OrderStatus   @default(NEW)
+  /// Snapshot of ordered items: [{ itemId, name, unitPrice, quantity, notes? }]
+  items          Json
+  /// Recomputed on the server from DB prices — never taken from the model.
+  total          Decimal       @db.Decimal(10, 2)
+  deliveryType   DeliveryType
+  address        String?
+  phone          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([businessId, status, createdAt])
+}
+
+model Booking {
+  id             String        @id @default(cuid())
+  businessId     String
+  business       Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  serviceId      String?
+  service        Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  startsAt       DateTime
+  partySize      Int           @default(1)
+  contactName    String
+  contactPhone   String
+  status         BookingStatus @default(PENDING)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([businessId, startsAt])
+}

@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: supportbot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-supportbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-supportbot}
+      POSTGRES_DB: ${POSTGRES_DB:-supportbot}
+    ports:
+      # Host port 5434 avoids clashing with other local Postgres instances (5432/5433).
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
