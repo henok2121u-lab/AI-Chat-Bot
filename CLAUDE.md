@@ -8,7 +8,7 @@ This is a portfolio project for Upwork. Code quality, a clean README, and a work
 ## Stack
 - Node.js 22+, TypeScript (ESM, NodeNext), Express 5
 - PostgreSQL + Prisma 7 (driver adapter `@prisma/adapter-pg`; config in `server/prisma.config.ts`; client generated to `server/src/generated/prisma`, import from `../generated/prisma/client.js`)
-- AI: Anthropic Claude API (`@anthropic-ai/sdk`) with tool use
+- AI: provider set by `AI_PROVIDER` — Google Gemini (`@google/genai`, default, `gemini-3.8-flash`) or Anthropic Claude (`@anthropic-ai/sdk`), both with tool/function calling
 - Telegram Bot API (`grammy`)
 - WhatsApp Cloud API (Meta Graph API, plain `fetch`)
 - Dashboard: React + Vite + TypeScript + Tailwind, talking to the Express API
@@ -44,9 +44,9 @@ README.md
 3. The business knowledge is small enough to put directly in the system prompt. No vector DB / RAG for v1.
 
 ## AI tools (Claude tool use)
-- `create_order({ items: [{ itemId, quantity, notes? }], deliveryType, address?, phone? })` — only items that exist in the menu; server recomputes the total from DB prices, never trusts the model's math
+- `create_order({ items: [{ itemId, quantity, notes? }], deliveryType, address?, phone? })` — only items that exist in the menu; server recomputes subtotal, delivery fee (Business.deliveryFee / freeDeliveryThreshold / minDeliveryOrder) and total from DB prices, never trusts the model's math; refused while closed
 - `create_booking({ serviceId?, date, time, partySize?, name, phone })` — check business hours and simple capacity
-- `check_order_status({ orderId })`
+- `check_order_status({ orderNumber? })` — customer-facing order number (#1042); scoped to the current customer; omit to list their recent orders
 - `handoff_to_human({ reason })` — sets conversation.mode = 'human', marks it as needing attention
 
 System prompt rules: answer only from provided business info; never invent prices or items; confirm order details with the customer before calling create_order; hand off when unsure, when the customer is angry, or when asked for a person; reply in the customer's language (English and Amharic at minimum); keep replies short (chat, not email).
@@ -95,9 +95,17 @@ Secrets (bot tokens, WhatsApp tokens) must be encrypted at rest (AES-256-GCM wit
 7. WhatsApp adapter
 8. Polish: README with screenshots and a demo GIF, deploy (Railway/Render + managed Postgres)
 
+## Engine notes
+- `AI_PROVIDER=gemini|anthropic` (default gemini), `AI_EFFORT` (default `medium`), `GEMINI_MODEL` / `ANTHROPIC_MODEL`. `createAiClient()` in `lib/ai.ts` picks the client.
+- The engine speaks the Anthropic Messages shape (system/tools/tool_use/tool_result). `lib/gemini.ts` translates to and from Gemini `generateContent` (function calls, thought signatures, finish reasons, retries on 429/5xx). On Anthropic, requests use the beta Messages API with `fallbacks: "default"`.
+- The engine depends on the `AiClient` interface (`lib/ai.ts`), so tests inject a scripted fake (`src/test/helpers.ts`).
+- History sent to the model is rebuilt from stored text messages each turn; within a turn, assistant content (incl. thinking blocks) is appended unchanged. Keep it append-only — don't edit earlier turns mid-loop.
+- System prompt = stable knowledge block (prompt-cached) + per-turn context block (current time, open/closed, customer).
+
 ## Commands (run in /server unless noted)
 - `docker compose up -d` (repo root) — start Postgres
 - `npm run dev` — API on http://localhost:4000 (`GET /health`)
 - `npm run db:migrate` — create/apply migrations; `npm run db:seed` — reseed demo restaurant (idempotent); `npm run db:studio`
-- `npm test`, `npm run typecheck`, `npm run build`
+- `npm run chat` — chat with the demo restaurant in the terminal as a customer (`-- --name Sara --user sara --verbose`; `/reset`, `/status`, `/quit`). Needs the API key for `AI_PROVIDER` in `.env` (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`)
+- `npm test` (needs Postgres running; uses a separate `<db>_test` database, created and migrated automatically), `npm run typecheck`, `npm run build`
 - Demo login: `demo@supportbot.test` / `demo1234` (business id `demo-selam-kitchen`)

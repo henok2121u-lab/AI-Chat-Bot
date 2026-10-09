@@ -25,6 +25,8 @@ enum BusinessType {
 enum Channel {
   TELEGRAM
   WHATSAPP
+  /// Local terminal chat for development (src/cli/chat.ts).
+  CLI
 }
 
 enum ConversationMode {
@@ -91,6 +93,13 @@ model Business {
 
   /// Bookings allowed per time slot (simple capacity check).
   bookingSlotCapacity Int @default(5)
+
+  // Delivery pricing — used by create_order so totals never come from the model.
+  deliveryFee           Decimal  @default(0) @db.Decimal(10, 2)
+  /// Subtotal at or above which delivery is free (null = never free).
+  freeDeliveryThreshold Decimal? @db.Decimal(10, 2)
+  /// Minimum subtotal for delivery orders (null = no minimum).
+  minDeliveryOrder      Decimal? @db.Decimal(10, 2)
 
   // Channel credentials — stored AES-256-GCM encrypted (see src/lib/crypto.ts).
   telegramBotToken      String?
@@ -227,7 +236,9 @@ model Order {
   status         OrderStatus   @default(NEW)
   /// Snapshot of ordered items: [{ itemId, name, unitPrice, quantity, notes? }]
   items          Json
-  /// Recomputed on the server from DB prices — never taken from the model.
+  /// Money fields are recomputed on the server from DB prices — never taken from the model.
+  subtotal       Decimal       @db.Decimal(10, 2)
+  deliveryFee    Decimal       @default(0) @db.Decimal(10, 2)
   total          Decimal       @db.Decimal(10, 2)
   deliveryType   DeliveryType
   address        String?

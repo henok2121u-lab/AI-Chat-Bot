@@ -130,6 +130,9 @@ async function main() {
       phone: "+251 900 000 000",
       policies,
       bookingSlotCapacity: 6,
+      deliveryFee: 100,
+      freeDeliveryThreshold: 2000,
+      minDeliveryOrder: 400,
       botEnabled: true,
     },
   });
