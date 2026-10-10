@@ -111,6 +111,13 @@ Secrets (bot tokens, WhatsApp tokens) must be encrypted at rest (AES-256-GCM wit
 - `/orders` and `/bookings`: list/get/`PATCH { status }` with allowed transitions only (409 otherwise).
 - POST/PATCH/PUT must be JSON (415 otherwise) — CSRF guard together with SameSite cookies. CORS allows `DASHBOARD_ORIGIN` with credentials.
 
+## Dashboard (`/dashboard`)
+- Vite 8 + React 19 + TypeScript + Tailwind 4 (`@tailwindcss/vite`, theme tokens in `src/index.css`), react-router 8, TanStack Query 5, lucide-react icons.
+- Dev: Vite proxies `/api` to the server (`VITE_API_PROXY`, default http://localhost:8080), so the session cookie is same-origin; `fetch` wrapper in `src/api/client.ts` throws `ApiError(status, message)`.
+- `src/api/hooks.ts`: one hook per endpoint; inbox list + open conversation poll every 5s (`POLL_MS`). Types in `src/api/types.ts` mirror the server (money as strings).
+- Pages: `/login`, `/register`, `/inbox/:conversationId?` (list with filters, chat, take over / give back, mark handled, staff reply, customer panel with orders/bookings), `/knowledge/:tab?` (business info + hours, menu, services, FAQs). Shared primitives in `src/components/ui.tsx`.
+- Forms send only editable fields — the API's `.strict()` schemas reject extras like `createdAt`.
+
 ## Commands (run in /server unless noted)
 - `docker compose up -d` (repo root) — start Postgres
 - `npm run dev` — API on http://localhost:8080 (`GET /health`). Not 4000: Windows reserves 3926–4025 on this machine
@@ -118,4 +125,5 @@ Secrets (bot tokens, WhatsApp tokens) must be encrypted at rest (AES-256-GCM wit
 - `npm run chat` — chat with the demo restaurant in the terminal as a customer (`-- --name Sara --user sara --verbose`; `/reset`, `/status`, `/quit`). Needs the API key for `AI_PROVIDER` in `.env` (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`)
 - `npm run telegram:webhook -- set [--token <BotFather token>] [--url https://…]` — store the bot token (encrypted) + a fresh secret and call setWebhook. URL is auto-detected from the running ngrok agent (`ngrok http 8080`); token is only needed the first time. Also `info` (webhook status/last error) and `delete`
 - `npm test` (needs Postgres running; uses a separate `<db>_test` database, created and migrated automatically), `npm run typecheck`, `npm run build`
+- Dashboard (in /dashboard): `npm run dev` → http://localhost:5173 (needs the server on 8080), `npm run build`, `npm run typecheck`
 - Demo login: `demo@supportbot.test` / `demo1234` (business id `demo-selam-kitchen`)
