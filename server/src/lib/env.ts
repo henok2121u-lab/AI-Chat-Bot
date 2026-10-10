@@ -9,7 +9,7 @@ const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  PORT: z.coerce.number().int().positive().default(4000),
+  PORT: z.coerce.number().int().positive().default(8080),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   DATABASE_URL: z.url(),
 
@@ -33,6 +33,9 @@ const envSchema = z.object({
   // Needed only when the API key isn't scoped to a workspace.
   ANTHROPIC_WORKSPACE_ID: z.preprocess(emptyToUndefined, z.string().optional()),
   ANTHROPIC_MODEL: z.string().default("claude-opus-5-5"),
+
+  // Only read by `npm run telegram:webhook -- set` on first connect; the token is then stored encrypted.
+  TELEGRAM_BOT_TOKEN: z.preprocess(emptyToUndefined, z.string().optional()),
 
   WHATSAPP_VERIFY_TOKEN: z.preprocess(emptyToUndefined, z.string().optional()),
   WHATSAPP_APP_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),

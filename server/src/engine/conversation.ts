@@ -20,7 +20,7 @@ export interface IncomingMessage {
 
 /** Sends a message back to the customer through the channel it came from. */
 export interface ReplySender {
-  send(externalUserId: string, text: string): Promise<void>;
+  send(externalUserId: string, text: string): Promise<unknown>;
 }
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
@@ -153,17 +153,24 @@ export function createConversationEngine(deps: EngineDeps) {
     const messages = await loadHistory(ctx.conversationId);
 
     for (let call = 0; call < maxModelCalls; call++) {
-      const response = await ai.createMessage({
-        model,
-        max_tokens: 16000,
-        system,
-        tools: toolDefinitions,
-        messages,
-        output_config: { effort },
-        // On a safety-classifier refusal, retry server-side on Anthropic's recommended fallback model.
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-      });
+      const startedAt = performance.now();
+      const response = await ai
+        .createMessage({
+          model,
+          max_tokens: 16000,
+          system,
+          tools: toolDefinitions,
+          messages,
+          output_config: { effort },
+          // On a safety-classifier refusal, retry server-side on Anthropic's recommended fallback model.
+          betas: ["server-side-fallback-2026-07-01"],
+          fallbacks: "default",
+        })
+        .catch((err: unknown) => {
+          log.warn({ call, ms: Math.round(performance.now() - startedAt) }, "AI call failed");
+          throw err;
+        });
+      log.info({ call, ms: Math.round(performance.now() - startedAt), stopReason: response.stop_reason }, "AI call");
 
       if (response.stop_reason === "refusal") {
         log.warn({ stopDetails: response.stop_details }, "Model refused");
@@ -252,3 +259,5 @@ export function createConversationEngine(deps: EngineDeps) {
 
   return { handleIncomingMessage };
 }
+
+export type ConversationEngine = ReturnType<typeof createConversationEngine>;

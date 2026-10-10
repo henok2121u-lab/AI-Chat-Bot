@@ -28,9 +28,10 @@ const THINKING_LEVEL: Record<string, ThinkingLevel> = {
 export function createGeminiClient(apiKey: string): AiClient {
   const genai = new GoogleGenAI({
     apiKey,
-    // Retry 408/429/5xx (e.g. "model is experiencing high demand") with backoff,
-    // capped so a chat customer isn't left waiting much longer than ~15s.
-    httpOptions: { retryOptions: { attempts: 4, initialDelay: 1, maxDelay: 8 } },
+    // Each attempt is cut off after 20s, and 408/429/5xx ("model is experiencing
+    // high demand") are retried with backoff — so a stuck request costs about a
+    // minute at worst instead of blocking the chat for several.
+    httpOptions: { timeout: 20_000, retryOptions: { attempts: 3, initialDelay: 1, maxDelay: 4 } },
   });
   // Gemini requires each function call's thought signature to be sent back with it.
   const thoughtSignatures = new Map<string, string>();

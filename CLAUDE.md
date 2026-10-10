@@ -75,7 +75,7 @@ Secrets (bot tokens, WhatsApp tokens) must be encrypted at rest (AES-256-GCM wit
 - Live updates: start with polling every 5s; Server-Sent Events later
 
 ## Channel notes
-- Telegram: one bot token per business; webhook URL `/webhooks/telegram/:businessId` with secret_token header check.
+- Telegram: one bot token per business; webhook URL `/webhooks/telegram/:businessId` with secret_token header check. Implemented in `channels/telegram.ts` (grammy `Api` for sending; updates acked with 200 then processed via `KeyedQueue`, one at a time per chat). Private text messages only; `/start` becomes a greeting; non-text gets a text-only notice; groups ignored.
 - WhatsApp Cloud API: webhook `/webhooks/whatsapp` (GET for verify token, POST for messages; verify X-Hub-Signature-256). Route to business by phone_number_id. Free-form replies only within 24h of the customer's last message; outside that, templates are needed — show this in the dashboard.
 
 ## Conventions
@@ -104,8 +104,9 @@ Secrets (bot tokens, WhatsApp tokens) must be encrypted at rest (AES-256-GCM wit
 
 ## Commands (run in /server unless noted)
 - `docker compose up -d` (repo root) — start Postgres
-- `npm run dev` — API on http://localhost:4000 (`GET /health`)
+- `npm run dev` — API on http://localhost:8080 (`GET /health`). Not 4000: Windows reserves 3926–4025 on this machine
 - `npm run db:migrate` — create/apply migrations; `npm run db:seed` — reseed demo restaurant (idempotent); `npm run db:studio`
 - `npm run chat` — chat with the demo restaurant in the terminal as a customer (`-- --name Sara --user sara --verbose`; `/reset`, `/status`, `/quit`). Needs the API key for `AI_PROVIDER` in `.env` (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`)
+- `npm run telegram:webhook -- set [--token <BotFather token>] [--url https://…]` — store the bot token (encrypted) + a fresh secret and call setWebhook. URL is auto-detected from the running ngrok agent (`ngrok http 8080`); token is only needed the first time. Also `info` (webhook status/last error) and `delete`
 - `npm test` (needs Postgres running; uses a separate `<db>_test` database, created and migrated automatically), `npm run typecheck`, `npm run build`
 - Demo login: `demo@supportbot.test` / `demo1234` (business id `demo-selam-kitchen`)
