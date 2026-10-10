@@ -104,6 +104,8 @@ model Business {
   // Channel credentials — stored AES-256-GCM encrypted (see src/lib/crypto.ts).
   telegramBotToken      String?
   telegramWebhookSecret String?
+  /// Shown in the dashboard ("Connected as @...").
+  telegramBotUsername   String?
   whatsappPhoneNumberId String? @unique
   whatsappAccessToken   String?
 

@@ -149,7 +149,11 @@ export async function connectTelegramBot(
   // Save before setWebhook so the first update already finds the new secret.
   await db.business.update({
     where: { id: opts.businessId },
-    data: { telegramBotToken: encryptSecret(opts.token), telegramWebhookSecret: encryptSecret(secret) },
+    data: {
+      telegramBotToken: encryptSecret(opts.token),
+      telegramWebhookSecret: encryptSecret(secret),
+      telegramBotUsername: me.username,
+    },
   });
   await api.setWebhook(webhookUrl, {
     secret_token: secret,
@@ -167,6 +171,6 @@ export async function disconnectTelegramBot(db: PrismaClient, businessId: string
   }
   await db.business.update({
     where: { id: businessId },
-    data: { telegramBotToken: null, telegramWebhookSecret: null },
+    data: { telegramBotToken: null, telegramWebhookSecret: null, telegramBotUsername: null },
   });
 }

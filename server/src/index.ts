@@ -1,4 +1,5 @@
 import { createApp } from "./app.js";
+import { createOutboundSender } from "./channels/outbound.js";
 import { createConversationEngine } from "./engine/conversation.js";
 import { createAiClient } from "./lib/ai.js";
 import { db } from "./lib/db.js";
@@ -11,7 +12,10 @@ const engine = createConversationEngine({ db, ai: ai.client, logger, model: ai.m
 // Messages are processed after the webhook is acknowledged, one at a time per chat.
 const queue = new KeyedQueue((err, key) => logger.error({ err, key }, "Message processing failed"));
 
-const app = createApp({ telegram: { db, engine, logger, queue } });
+const app = createApp({
+  telegram: { db, engine, logger, queue },
+  api: { db, sendToCustomer: createOutboundSender(db) },
+});
 
 const server = app.listen(env.PORT, (err) => {
   // Express 5 reports listen failures (port in use, EACCES on a Windows-reserved port) here.

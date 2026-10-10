@@ -102,10 +102,19 @@ Secrets (bot tokens, WhatsApp tokens) must be encrypted at rest (AES-256-GCM wit
 - History sent to the model is rebuilt from stored text messages each turn; within a turn, assistant content (incl. thinking blocks) is appended unchanged. Keep it append-only — don't edit earlier turns mid-loop.
 - System prompt = stable knowledge block (prompt-cached) + per-turn context block (current time, open/closed, customer).
 
+## REST API (`/api`, implemented in `server/src/routes`)
+- Auth (`routes/auth.ts`, `lib/auth.ts`): `POST /auth/register|login|logout`, `GET /auth/me`. JWT (jose, HS256, 7 days) in httpOnly SameSite=Lax cookie `sb_session`; login/register rate-limited. `requireAuth` re-loads the user and sets `req.auth = { userId, businessId, role }`.
+- Every route takes businessId from `auth(req)`, never from the request. Scoped writes use `update/delete({ where: { id, businessId } })`; Prisma P2025 → 404, so other tenants' ids look like they don't exist.
+- `GET/PATCH /business` (owner only for PATCH; never returns channel secrets; `channels.telegram.connected/botUsername`), `POST/DELETE /business/telegram` (connect via token; uses PUBLIC_URL, or ngrok in dev).
+- CRUD: `/menu-items`, `/services`, `/faqs`. Create schemas add defaults; update schemas are `.partial().strict()` of a default-free base (zod applies defaults inside partial).
+- `/conversations` (list: needs-attention first, `filter=all|attention|human`, `before`), `GET /:id` (messages + orders + bookings), `GET /:id/messages?after=` (polling), `PATCH /:id { mode, needsAttention }`, `POST /:id/messages { text }` (staff reply via `channels/outbound.ts`, sets mode HUMAN). WhatsApp items carry `replyWindowEndsAt/canReply` (24h rule).
+- `/orders` and `/bookings`: list/get/`PATCH { status }` with allowed transitions only (409 otherwise).
+- POST/PATCH/PUT must be JSON (415 otherwise) — CSRF guard together with SameSite cookies. CORS allows `DASHBOARD_ORIGIN` with credentials.
+
 ## Commands (run in /server unless noted)
 - `docker compose up -d` (repo root) — start Postgres
 - `npm run dev` — API on http://localhost:8080 (`GET /health`). Not 4000: Windows reserves 3926–4025 on this machine
-- `npm run db:migrate` — create/apply migrations; `npm run db:seed` — reseed demo restaurant (idempotent); `npm run db:studio`
+- `npm run db:migrate` — create/apply migrations and regenerate the Prisma client (Prisma 7's `migrate dev` doesn't always regenerate — a stale client gives "Unknown argument" validation errors); `npm run db:seed` — reseed demo restaurant (idempotent); `npm run db:studio`
 - `npm run chat` — chat with the demo restaurant in the terminal as a customer (`-- --name Sara --user sara --verbose`; `/reset`, `/status`, `/quit`). Needs the API key for `AI_PROVIDER` in `.env` (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`)
 - `npm run telegram:webhook -- set [--token <BotFather token>] [--url https://…]` — store the bot token (encrypted) + a fresh secret and call setWebhook. URL is auto-detected from the running ngrok agent (`ngrok http 8080`); token is only needed the first time. Also `info` (webhook status/last error) and `delete`
 - `npm test` (needs Postgres running; uses a separate `<db>_test` database, created and migrated automatically), `npm run typecheck`, `npm run build`

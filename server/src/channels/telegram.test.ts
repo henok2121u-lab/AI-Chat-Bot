@@ -42,6 +42,7 @@ function setup(engine: ConversationEngine) {
     throw err;
   });
   const app = createApp({
+    api: { db, sendToCustomer: async () => {} },
     telegram: {
       db,
       engine,
