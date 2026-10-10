@@ -265,6 +265,11 @@ describe("orders and bookings", () => {
     expect(list.body.find((o: { id: string }) => o.id === order.id)).toMatchObject({ total: "1050", customer: { name: "Sara" } });
 
     await a.agent.patch(`/api/orders/${order.id}`).send({ status: "CONFIRMED" }).expect(200);
+    const active = await a.agent.get("/api/orders?status=NEW,CONFIRMED,READY").expect(200);
+    expect(active.body.map((o: { id: string }) => o.id)).toContain(order.id);
+    const done = await a.agent.get("/api/orders?status=DELIVERED,CANCELLED").expect(200);
+    expect(done.body.map((o: { id: string }) => o.id)).not.toContain(order.id);
+    await a.agent.get("/api/orders?status=NEW,BOGUS").expect(400);
     const bad = await a.agent.patch(`/api/orders/${order.id}`).send({ status: "DELIVERED" }).expect(409);
     expect(bad.body.error).toMatch(/CONFIRMED to DELIVERED/);
     await a.agent.patch(`/api/orders/${order.id}`).send({ status: "READY" }).expect(200);

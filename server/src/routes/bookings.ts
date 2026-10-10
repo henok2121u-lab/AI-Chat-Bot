@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { BookingStatus, Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { auth } from "../lib/auth.js";
-import { HttpError, idParams } from "../lib/http.js";
+import { csvEnum, HttpError, idParams } from "../lib/http.js";
 
 const STATUSES = ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"] as const;
 
@@ -19,7 +19,8 @@ const listQuery = z
     /** Range for the calendar view; defaults to upcoming bookings (from 24h ago). */
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),
-    status: z.enum(STATUSES).optional(),
+    /** One status or a comma-separated list, e.g. PENDING,CONFIRMED. */
+    status: csvEnum(STATUSES).optional(),
     limit: z.coerce.number().int().min(1).max(500).default(200),
   })
   .refine((q) => !q.from || !q.to || q.from < q.to, "`from` must be before `to`");
@@ -40,7 +41,7 @@ export function bookingsRouter(db: PrismaClient): Router {
       await db.booking.findMany({
         where: {
           businessId: auth(req).businessId,
-          status,
+          status: status && { in: status },
           startsAt: { gte: from ?? new Date(Date.now() - 24 * 60 * 60 * 1000), ...(to && { lt: to }) },
         },
         orderBy: { startsAt: "asc" },

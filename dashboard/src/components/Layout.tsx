@@ -1,9 +1,11 @@
-import { BookOpen, Inbox, LogOut, MessageCircleMore } from "lucide-react";
+import { BookOpen, CalendarDays, Inbox, LogOut, MessageCircleMore, ShoppingBag } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router";
-import { useConversations, useLogout, useMe } from "../api/hooks";
+import { useConversations, useLogout, useMe, useOrders } from "../api/hooks";
 
 const nav = [
   { to: "/inbox", label: "Inbox", icon: Inbox },
+  { to: "/orders", label: "Orders", icon: ShoppingBag },
+  { to: "/bookings", label: "Bookings", icon: CalendarDays },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
 ];
 
@@ -13,7 +15,11 @@ export function Layout() {
   const navigate = useNavigate();
   // Shares the inbox's polled query, so the badge stays live on every page.
   const attention = useConversations("attention");
-  const attentionCount = attention.data?.length ?? 0;
+  const newOrders = useOrders("NEW");
+  const badges: Record<string, number> = {
+    "/inbox": attention.data?.length ?? 0,
+    "/orders": newOrders.data?.length ?? 0,
+  };
 
   return (
     <div className="flex h-full flex-col md:flex-row">
@@ -33,10 +39,10 @@ export function Layout() {
               }
             >
               <Icon className="size-4" aria-hidden />
-              <span>{label}</span>
-              {to === "/inbox" && attentionCount > 0 && (
-                <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-xs font-semibold text-white" aria-label={`${attentionCount} need attention`}>
-                  {attentionCount}
+              <span className="sr-only md:not-sr-only">{label}</span>
+              {(badges[to] ?? 0) > 0 && (
+                <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-xs font-semibold text-white">
+                  {badges[to]}
                 </span>
               )}
             </NavLink>

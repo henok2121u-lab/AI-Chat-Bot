@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { OrderStatus, Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { auth } from "../lib/auth.js";
-import { HttpError, idParams } from "../lib/http.js";
+import { csvEnum, HttpError, idParams } from "../lib/http.js";
 
 const STATUSES = ["NEW", "CONFIRMED", "READY", "DELIVERED", "CANCELLED"] as const;
 
@@ -16,7 +16,8 @@ const NEXT_STATUS: Record<OrderStatus, OrderStatus[]> = {
 };
 
 const listQuery = z.object({
-  status: z.enum(STATUSES).optional(),
+  /** One status or a comma-separated list, e.g. NEW,CONFIRMED,READY. */
+  status: csvEnum(STATUSES).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   before: z.coerce.date().optional(),
 });
@@ -34,7 +35,7 @@ export function ordersRouter(db: PrismaClient): Router {
     const { status, limit, before } = listQuery.parse(req.query);
     res.json(
       await db.order.findMany({
-        where: { businessId: auth(req).businessId, status, ...(before && { createdAt: { lt: before } }) },
+        where: { businessId: auth(req).businessId, status: status && { in: status }, ...(before && { createdAt: { lt: before } }) },
         orderBy: { createdAt: "desc" },
         take: limit,
         include,

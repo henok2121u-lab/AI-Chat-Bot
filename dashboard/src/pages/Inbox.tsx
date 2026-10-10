@@ -1,10 +1,11 @@
 import { ArrowLeft, Bot, CircleAlert, Hand, Inbox as InboxIcon, MessagesSquare, Send, UserRound } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { type InboxFilter, useConversation, useConversations, useSendReply, useUpdateConversation } from "../api/hooks";
+import { type InboxFilter, useBusiness, useConversation, useConversations, useSendReply, useUpdateConversation } from "../api/hooks";
 import type { ConversationDetail, ConversationSummary, Message } from "../api/types";
 import { Badge, Button, EmptyState, ErrorNote, Spinner } from "../components/ui";
-import { channelLabel, formatMoney, formatTime, timeAgo } from "../lib/format";
+import { channelLabel, formatInZone, formatMoney, formatTime, timeAgo } from "../lib/format";
+import { BOOKING_STATUS, ORDER_STATUS } from "../lib/status";
 
 const FILTERS: { value: InboxFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -281,6 +282,8 @@ function ReplyBox({ conversation: c }: { conversation: ConversationDetail }) {
 }
 
 function CustomerPanel({ conversation: c }: { conversation: ConversationDetail }) {
+  const business = useBusiness().data;
+  const timeZone = business?.timezone ?? "UTC";
   return (
     <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-slate-200 bg-white p-4 xl:block" aria-label="Customer details">
       <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Customer</h3>
@@ -299,14 +302,14 @@ function CustomerPanel({ conversation: c }: { conversation: ConversationDetail }
             <li key={o.id} className="rounded-lg bg-slate-50 p-2.5 text-sm">
               <div className="flex justify-between font-medium">
                 <span>#{o.number}</span>
-                <Badge color={o.status === "CANCELLED" ? "red" : o.status === "DELIVERED" ? "green" : "amber"}>{o.status.toLowerCase()}</Badge>
+                <Badge color={ORDER_STATUS[o.status].color}>{ORDER_STATUS[o.status].label}</Badge>
               </div>
               <ul className="mt-1 text-slate-600">
                 {o.items.map((i) => (
                   <li key={i.itemId}>{i.quantity} × {i.name}</li>
                 ))}
               </ul>
-              <p className="mt-1 font-medium">{formatMoney(o.total)}</p>
+              <p className="mt-1 font-medium">{formatMoney(o.total, business?.currency)}</p>
               {o.address && <p className="text-xs text-slate-500">{o.deliveryType.toLowerCase()} · {o.address}</p>}
             </li>
           ))}
@@ -320,9 +323,9 @@ function CustomerPanel({ conversation: c }: { conversation: ConversationDetail }
         <ul className="mt-2 space-y-2">
           {c.bookings.map((b) => (
             <li key={b.id} className="rounded-lg bg-slate-50 p-2.5 text-sm">
-              <p className="font-medium">{new Date(b.startsAt).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+              <p className="font-medium">{formatInZone(b.startsAt, timeZone, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}</p>
               <p className="text-slate-600">{b.partySize} people · {b.contactName}</p>
-              <Badge color={b.status === "CANCELLED" ? "red" : "green"}>{b.status.toLowerCase()}</Badge>
+              <Badge color={BOOKING_STATUS[b.status].color}>{BOOKING_STATUS[b.status].label}</Badge>
             </li>
           ))}
         </ul>

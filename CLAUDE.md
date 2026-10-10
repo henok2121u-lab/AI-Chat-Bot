@@ -108,14 +108,16 @@ Secrets (bot tokens, WhatsApp tokens) must be encrypted at rest (AES-256-GCM wit
 - `GET/PATCH /business` (owner only for PATCH; never returns channel secrets; `channels.telegram.connected/botUsername`), `POST/DELETE /business/telegram` (connect via token; uses PUBLIC_URL, or ngrok in dev).
 - CRUD: `/menu-items`, `/services`, `/faqs`. Create schemas add defaults; update schemas are `.partial().strict()` of a default-free base (zod applies defaults inside partial).
 - `/conversations` (list: needs-attention first, `filter=all|attention|human`, `before`), `GET /:id` (messages + orders + bookings), `GET /:id/messages?after=` (polling), `PATCH /:id { mode, needsAttention }`, `POST /:id/messages { text }` (staff reply via `channels/outbound.ts`, sets mode HUMAN). WhatsApp items carry `replyWindowEndsAt/canReply` (24h rule).
-- `/orders` and `/bookings`: list/get/`PATCH { status }` with allowed transitions only (409 otherwise).
+- `/orders` and `/bookings`: list/get/`PATCH { status }` with allowed transitions only (409 otherwise). `?status=` takes one status or a comma list (`NEW,CONFIRMED,READY`).
 - POST/PATCH/PUT must be JSON (415 otherwise) — CSRF guard together with SameSite cookies. CORS allows `DASHBOARD_ORIGIN` with credentials.
 
 ## Dashboard (`/dashboard`)
 - Vite 8 + React 19 + TypeScript + Tailwind 4 (`@tailwindcss/vite`, theme tokens in `src/index.css`), react-router 8, TanStack Query 5, lucide-react icons.
 - Dev: Vite proxies `/api` to the server (`VITE_API_PROXY`, default http://localhost:8080), so the session cookie is same-origin; `fetch` wrapper in `src/api/client.ts` throws `ApiError(status, message)`.
 - `src/api/hooks.ts`: one hook per endpoint; inbox list + open conversation poll every 5s (`POLL_MS`). Types in `src/api/types.ts` mirror the server (money as strings).
-- Pages: `/login`, `/register`, `/inbox/:conversationId?` (list with filters, chat, take over / give back, mark handled, staff reply, customer panel with orders/bookings), `/knowledge/:tab?` (business info + hours, menu, services, FAQs). Shared primitives in `src/components/ui.tsx`.
+- Pages: `/login`, `/register`, `/inbox/:conversationId?` (list with filters, chat, take over / give back, mark handled, staff reply, customer panel with orders/bookings), `/orders?tab=` (status tabs, cards with next-step actions, cancel, link to chat), `/bookings?week=YYYY-MM-DD` (Mon–Sun agenda, confirm / arrived / no-show / cancel), `/knowledge/:tab?` (business info + hours, menu, services, FAQs). Shared primitives in `src/components/ui.tsx`; status labels/colors in `src/lib/status.ts`.
+- Booking and order times are formatted in the business's timezone (`formatInZone`, `dateKeyInZone` in `src/lib/format.ts`), never the browser's.
+- Sidebar badges: conversations needing attention, NEW orders (both polled).
 - Forms send only editable fields — the API's `.strict()` schemas reject extras like `createdAt`.
 
 ## Commands (run in /server unless noted)

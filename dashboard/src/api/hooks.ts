@@ -1,6 +1,8 @@
 import { type QueryKey, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
 import type {
+  Booking,
+  BookingStatus,
   Business,
   ConversationDetail,
   ConversationMode,
@@ -8,6 +10,8 @@ import type {
   Faq,
   MenuItem,
   Message,
+  Order,
+  OrderStatus,
   Service,
   Session,
 } from "./types";
@@ -23,6 +27,8 @@ export const keys = {
   faqs: ["faqs"] as const,
   conversations: (filter: string) => ["conversations", filter] as const,
   conversation: (id: string) => ["conversation", id] as const,
+  orders: (statuses: string) => ["orders", statuses] as const,
+  bookings: (from: string, to: string) => ["bookings", from, to] as const,
 };
 
 // --- Session ---------------------------------------------------------------
@@ -153,5 +159,43 @@ export function useSendReply() {
     mutationFn: ({ id, text }: { id: string; text: string }) =>
       api<Message>(`/conversations/${id}/messages`, { method: "POST", body: { text } }),
     onSuccess: (_data, { id }) => refresh(id),
+  });
+}
+
+// --- Orders & bookings -------------------------------------------------------
+
+/** `statuses` is a comma-separated list ("" for all). Polls so new bot orders appear. */
+export function useOrders(statuses: string) {
+  return useQuery({
+    queryKey: keys.orders(statuses),
+    queryFn: () => api<Order[]>(`/orders?limit=100${statuses ? `&status=${statuses}` : ""}`),
+    refetchInterval: POLL_MS,
+  });
+}
+
+export function useUpdateOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: OrderStatus }) => api<Order>(`/orders/${id}`, { method: "PATCH", body: { status } }),
+    onSuccess: () =>
+      Promise.all([qc.invalidateQueries({ queryKey: ["orders"] }), qc.invalidateQueries({ queryKey: ["conversation"] })]),
+  });
+}
+
+export function useBookings(from: string, to: string) {
+  return useQuery({
+    queryKey: keys.bookings(from, to),
+    queryFn: () => api<Booking[]>(`/bookings?limit=500&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    refetchInterval: POLL_MS * 6,
+  });
+}
+
+export function useUpdateBooking() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: BookingStatus }) =>
+      api<Booking>(`/bookings/${id}`, { method: "PATCH", body: { status } }),
+    onSuccess: () =>
+      Promise.all([qc.invalidateQueries({ queryKey: ["bookings"] }), qc.invalidateQueries({ queryKey: ["conversation"] })]),
   });
 }

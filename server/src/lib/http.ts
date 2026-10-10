@@ -27,3 +27,10 @@ export const optionalText = (max: number) =>
     .transform((v) => (v === "" ? null : v))
     .nullable()
     .optional();
+
+/** Query param listing one or more values, e.g. `?status=NEW,CONFIRMED`. */
+export const csvEnum = <const T extends readonly [string, ...string[]]>(values: T) =>
+  z
+    .string()
+    .transform((v) => v.split(",").map((s) => s.trim()).filter(Boolean))
+    .pipe(z.array(z.enum(values)).min(1));

@@ -108,6 +108,7 @@ export interface OrderItem {
 export interface Order {
   id: string;
   number: number;
+  conversationId: string | null;
   status: OrderStatus;
   items: OrderItem[];
   subtotal: string;
@@ -117,15 +118,21 @@ export interface Order {
   address: string | null;
   phone: string | null;
   createdAt: string;
+  /** Present on /orders responses (not on orders embedded in a conversation). */
+  customer?: Customer;
 }
 
 export interface Booking {
   id: string;
+  conversationId: string | null;
   startsAt: string;
   partySize: number;
   contactName: string;
   contactPhone: string;
   status: BookingStatus;
+  /** Present on /bookings responses. */
+  customer?: Customer;
+  service?: { id: string; name: string; durationMin: number } | null;
 }
 
 export interface ConversationDetail extends ConversationBase {

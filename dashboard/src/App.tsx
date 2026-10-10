@@ -2,9 +2,11 @@ import { Navigate, Outlet, Route, Routes, useLocation } from "react-router";
 import { useMe } from "./api/hooks";
 import { Layout } from "./components/Layout";
 import { Spinner } from "./components/ui";
+import { BookingsPage } from "./pages/Bookings";
 import { InboxPage } from "./pages/Inbox";
 import { KnowledgePage } from "./pages/knowledge/KnowledgePage";
 import { LoginPage } from "./pages/Login";
+import { OrdersPage } from "./pages/Orders";
 import { RegisterPage } from "./pages/Register";
 
 export function App() {
@@ -17,6 +19,8 @@ export function App() {
       <Route element={<RequireSession />}>
         <Route element={<Layout />}>
           <Route path="/inbox/:conversationId?" element={<InboxPage />} />
+          <Route path="/orders" element={<OrdersPage />} />
+          <Route path="/bookings" element={<BookingsPage />} />
           <Route path="/knowledge/:tab?" element={<KnowledgePage />} />
           <Route path="*" element={<Navigate to="/inbox" replace />} />
         </Route>
